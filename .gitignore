@@ -1,0 +1,12 @@
+aligner/train_test_splitting/*
+LID/data/*
+LID/model.bin
+LID/ft_train.txt
+other/mdf_mono/*
+parse_data_for_alighning/results/*
+parse_data_for_alighning/source/*
+parsing_aligned_data/sources/*
+parsing_aligned_data/results/*
+
+
+*.DS_Store
