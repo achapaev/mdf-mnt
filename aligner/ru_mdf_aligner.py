@@ -1,51 +1,100 @@
-import re
-
 import numpy as np
-import razdel
 import torch
+from transformers import AutoTokenizer, AutoModel
+
+from utils import clean_text, split_into_sentences
 
 
-def align_ru_mdf(
-        ru_text, 
-        mdf_text, 
-        model,
-        tokenizer,
-        alpha=0.2,
-        penalty=0.2,
-        threshold=0.45,
-    ):
-  
-    sents_ru = process_and_sentenize(ru_text)
-    sents_mdf = process_and_sentenize(mdf_text)
+def align_sentences(
+        lang1_text: str, 
+        lang2_text: str, 
+        model: AutoModel,
+        tokenizer: AutoTokenizer,
+        alpha: float = 0.2,
+        penalty: float = 0.2,
+        threshold: float = 0.45,
+    ) -> list[list[str]]:
+    """
+    Aligns sentences between two languages using sentence embeddings and similarity metrics.
+    
+    Args:
+        lang1_text (str): The text in the first language.
+        lang2_text (str): The text in the second language.
+        model (AutoModel): The embedding model.
+        tokenizer (AutoTokenizer): The tokenizer for the model.
+        alpha (float, optional): The alpha parameter for similarity adjustment. Default is 0.2.
+        penalty (float, optional): The penalty for alignment. Default is 0.2.
+        threshold (float, optional): The similarity threshold for alignment. Default is 0.45.
+    
+    Returns:
+        list[list[str]]: A list of aligned sentence pairs.
+    """
+    cleaned_lang1_text = clean_text(lang1_text)
+    cleaned_lang2_text = clean_text(lang2_text)
 
-    emb_ru = np.stack([embed(s, model, tokenizer) for s in sents_ru])
-    emb_mdf = np.stack([embed(s, model, tokenizer) for s in sents_mdf])
+    sents_lang1 = split_into_sentences(cleaned_lang1_text)
+    sents_lang2 = split_into_sentences(cleaned_lang2_text)
 
-    pen = np.array([[min(len(x), len(y)) / max(len(x), len(y)) for x in sents_mdf] for y in sents_ru])
-    sims = np.maximum(0, np.dot(emb_ru, emb_mdf.T)) ** 1 * pen
+    if not sents_lang1 and not sents_lang2:
+        return []
 
-    sims_rel = (sims.T - get_top_mean_by_row(sims) * alpha).T - get_top_mean_by_row(sims.T) * alpha - penalty
+    emb_lang1 = np.stack([get_sentence_embedding(s, model, tokenizer) for s in sents_lang1])
+    emb_lang2 = np.stack([get_sentence_embedding(s, model, tokenizer) for s in sents_lang2])
 
-    alignment = align(sims_rel)
+    length_ratio = np.array([[min(len(x), len(y)) / max(len(x), len(y)) for x in sents_lang2] for y in sents_lang1])
+    sims = np.maximum(0, np.dot(emb_lang1, emb_lang2.T)) ** 1 * length_ratio
+
+    sims_rel = (sims.T - compute_topk_mean(sims) * alpha).T - compute_topk_mean(sims.T) * alpha - penalty
+
+    alignment = compute_alignment_path(sims_rel)
 
     aligned_pairs = []
     for i, j in alignment:
         if sims[i, j] >= threshold:
-            aligned_pairs.append([sents_mdf[j], sents_ru[i]])
+            aligned_pairs.append([sents_lang1[i], sents_lang2[j]])
 
     return aligned_pairs
 
 
-def embed(text, model, tokenizer, max_length=128):
-    encoded_input = tokenizer(text, padding=True, truncation=True, max_length=max_length, return_tensors='pt')
+def get_sentence_embedding(text: str, model: AutoModel, tokenizer: AutoTokenizer, max_length: int = 128) -> np.ndarray:
+    """
+    Computes the sentence embedding using a transformer model.
+    
+    Args:
+        text (str): The input text.
+        model (AutoModel): The embedding model.
+        tokenizer (AutoTokenizer): The tokenizer for the model.
+        max_length (int, optional): The maximum token length. Default is 128.
+    
+    Returns:
+        np.ndarray: The sentence embedding vector.
+    """
+    encoded_input = tokenizer(
+        text, 
+        padding=True, 
+        truncation=True, 
+        max_length=max_length, 
+        return_tensors='pt'
+    ).to(model.device)
+
     with torch.inference_mode():
-        model_output = model.bert(**encoded_input.to(model.device))
-
+        model_output = model.bert(**encoded_input)
     embeddings = torch.nn.functional.normalize(model_output.pooler_output)
-    return embeddings[0].cpu().numpy()
+    
+    return embeddings[0].detach().cpu().numpy()
 
 
-def get_top_mean_by_row(x, k=5):
+def compute_topk_mean(x: np.ndarray, k: int = 5) -> np.ndarray:
+    """
+    Computes the mean of the top-k values in each row of a matrix.
+    
+    Args:
+        x (np.ndarray): The input matrix.
+        k (int, optional): The number of top elements to consider. Default is 5.
+    
+    Returns:
+        np.ndarray: The mean values for each row.
+    """
     m, n = x.shape
     k = min(k, n)
     topk_indices = np.argpartition(x, -k, axis=1)[:, -k:]
@@ -53,9 +102,18 @@ def get_top_mean_by_row(x, k=5):
     return x[rows, topk_indices].mean(1)
 
 
-def align(sims):
+def compute_alignment_path(sims: np.ndarray) -> list[list[int]]:
+    """
+    Computes the optimal alignment path between two sets of sentences based on similarity scores.
+    
+    Args:
+        sims (np.ndarray): The similarity matrix.
+    
+    Returns:
+        list[list[int]]: A list of aligned index pairs.
+    """
     rewards = np.zeros_like(sims)
-    choices = np.zeros_like(sims).astype(int)
+    choices = np.zeros_like(sims, dtype=int)
 
     for i in range(sims.shape[0]):
         for j in range(0, sims.shape[1]):
@@ -84,19 +142,4 @@ def align(sims):
             i -= 1
         else:
             j -= 1
-    return alignment[::-1]
-
-
-def process_and_sentenize(texts):
-    all_sents = []
-
-    for raw_text in texts:
-        raw_text = raw_text.replace('\xa0', ' ')
-        raw_text = re.sub('\s+', ' ', raw_text).strip().replace('* ', '')
-
-        sents = []
-        for sent in list(razdel.sentenize(raw_text)):
-            text = sent.text.replace('-\n', '').replace('\n', ' ').strip()
-            sents.append(text)
-        all_sents.extend(sents)
-    return all_sents
+    return alignment.reverse()
