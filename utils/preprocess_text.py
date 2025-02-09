@@ -3,6 +3,9 @@ import re
 
 import razdel
 
+QUOTE_TYPE = '"'
+DASH_TYPE = '-'
+
 
 def remove_hyphenation(text: str) -> str:
     """
@@ -18,7 +21,7 @@ def remove_hyphenation(text: str) -> str:
         str: The text with hyphenation removed.
     """
     return re.sub(
-        r'(\w)([\-+]\s+)(\w)', 
+        rf'(\w)([\{DASH_TYPE}+]\s+)(\w)', 
         lambda matchobj: matchobj.group(1) + matchobj.group(3), 
         text
     )
@@ -44,6 +47,8 @@ def limit_repeated_chars(text: str, max_run: int = 3) -> str:
 def clean_text(raw_text: str) -> str:
     """
     Cleans the input text by performing the following operations:
+    - Replacing all quotes with the specified type.
+    - Replacing all dashes with the specified type.
     - Removing hyphenation.
     - Limiting repeated characters.
     - Replacing multiple spaces with a single space.
@@ -56,11 +61,17 @@ def clean_text(raw_text: str) -> str:
     Returns:
         str: The cleaned text.
     """
-    text = remove_hyphenation(raw_text)
+    text = re.sub(r'[“”„‟«»‘’‚‛]', QUOTE_TYPE, raw_text)
+#     text = re.sub(r'[‐‑‒–—―]', DASH_TYPE, text)
+
+    text = remove_hyphenation(text)
     text = limit_repeated_chars(text)
+
     text = re.sub('(\. )+', '. ', text)
     text = text.replace('\xa0', ' ')
+
     text = re.sub('\s+', ' ', text)
+
     text = text.replace('* ', '')
     return text.strip()
 

@@ -13,4 +13,8 @@ other/mdf_mono/*
 
 aligner/v1_07_02_25/*
 
+*test.ipynb
+
 *.DS_Store
+*__pycache__
+
