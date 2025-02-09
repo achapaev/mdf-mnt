@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from transformers import AutoTokenizer, AutoModel
+from transformers import BertTokenizerFast, BertModel
 
 from utils import clean_text, split_into_sentences
 
@@ -8,8 +8,8 @@ from utils import clean_text, split_into_sentences
 def align_sentences(
         lang1_text: str, 
         lang2_text: str, 
-        model: AutoModel,
-        tokenizer: AutoTokenizer,
+        model: BertModel,
+        tokenizer: BertTokenizerFast,
         alpha: float = 0.2,
         penalty: float = 0.2,
         threshold: float = 0.45,
@@ -20,8 +20,8 @@ def align_sentences(
     Args:
         lang1_text (str): The text in the first language.
         lang2_text (str): The text in the second language.
-        model (AutoModel): The embedding model.
-        tokenizer (AutoTokenizer): The tokenizer for the model.
+        model (BertModel): The embedding model.
+        tokenizer (BertTokenizerFast): The tokenizer for the model.
         alpha (float, optional): The alpha parameter for similarity adjustment. Default is 0.2.
         penalty (float, optional): The penalty for alignment. Default is 0.2.
         threshold (float, optional): The similarity threshold for alignment. Default is 0.45.
@@ -56,14 +56,14 @@ def align_sentences(
     return aligned_pairs
 
 
-def get_sentence_embedding(text: str, model: AutoModel, tokenizer: AutoTokenizer, max_length: int = 128) -> np.ndarray:
+def get_sentence_embedding(text: str, model: BertModel, tokenizer: BertTokenizerFast, max_length: int = 128) -> np.ndarray:
     """
     Computes the sentence embedding using a transformer model.
     
     Args:
         text (str): The input text.
-        model (AutoModel): The embedding model.
-        tokenizer (AutoTokenizer): The tokenizer for the model.
+        model (BertModel): The embedding model.
+        tokenizer (BertTokenizerFast): The tokenizer for the model.
         max_length (int, optional): The maximum token length. Default is 128.
     
     Returns:
@@ -78,7 +78,7 @@ def get_sentence_embedding(text: str, model: AutoModel, tokenizer: AutoTokenizer
     ).to(model.device)
 
     with torch.inference_mode():
-        model_output = model.bert(**encoded_input)
+        model_output = model(**encoded_input)
     embeddings = torch.nn.functional.normalize(model_output.pooler_output)
     
     return embeddings[0].detach().cpu().numpy()
@@ -142,4 +142,6 @@ def compute_alignment_path(sims: np.ndarray) -> list[list[int]]:
             i -= 1
         else:
             j -= 1
-    return alignment.reverse()
+    
+    alignment.reverse()
+    return alignment

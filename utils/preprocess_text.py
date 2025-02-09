@@ -18,7 +18,7 @@ def remove_hyphenation(text: str) -> str:
         str: The text with hyphenation removed.
     """
     return re.sub(
-        r'(\w)[-+\s]+(\w)', 
+        r'(\w)([\-+]\s+)(\w)', 
         lambda matchobj: matchobj.group(1) + matchobj.group(3), 
         text
     )
@@ -38,7 +38,7 @@ def limit_repeated_chars(text: str, max_run: int = 3) -> str:
     Returns:
         str: The text with excessive repeated characters trimmed.
     """
-    return ''.join(''.join(group[:max_run]) for _, group in groupby(text))
+    return ''.join(''.join(list(group)[:max_run]) for _, group in groupby(text))
 
 
 def clean_text(raw_text: str) -> str:
