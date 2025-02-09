@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from transformers import BertTokenizerFast, BertModel
+from transformers import BertModel, BertTokenizerFast
 
 from utils import clean_text, split_into_sentences
 
