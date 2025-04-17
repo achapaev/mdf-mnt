@@ -6,8 +6,11 @@ LID/metrics_for_langs.csv
 parsing_aligned_data/sources/*
 parsing_aligned_data/results/*
 
-parse_data_for_alighning/results/*
 parse_data_for_alighning/source/*
+parse_data_for_alighning/results/*
+
+e-mordovia-2024/input/*
+e-mordovia-2024/results/*
 
 other/mdf_mono/*
 
